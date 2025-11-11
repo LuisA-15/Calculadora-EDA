@@ -1,26 +1,23 @@
-import importlib.util
-import inspect
-import os
-import sys
-from types import ModuleType
+# core/microkernel.py
 from typing import Dict, List, Sequence
-
+from types import ModuleType
+import importlib.util, inspect, os, sys
 from core.interfaces import Operation
 
+
 class Microkernel:
-    def __init__(self, plugins_dir: str = "plugins") -> None:
+    def __init__(self, bus, plugins_dir: str = "plugins") -> None:
         self._registry: Dict[str, Operation] = {}
         self._plugins_dir = plugins_dir
         self._loaded_modules: List[ModuleType] = []
+        self.bus = bus
+        self.bus.subscribe("calculate", self.on_calculate)
 
-
-    # --- Plugins---
     def discover_and_load(self) -> None:
-        """Dynamically import all .py files in plugins_dir and register Operation subclasses."""
         if not os.path.isdir(self._plugins_dir):
             return
         for fname in os.listdir(self._plugins_dir):
-            if not fname.endswith(".py") or fname.startswith("__"): # skip dunders
+            if not fname.endswith(".py") or fname.startswith("__"):
                 continue
             fpath = os.path.join(self._plugins_dir, fname)
             modname = f"plugin_{os.path.splitext(fname)[0]}"
@@ -32,10 +29,8 @@ class Microkernel:
                     spec.loader.exec_module(module)
                     self._loaded_modules.append(module)
                     self._register_from_module(module)
-
             except Exception as e:
-                print(f"Errorr raise {e}")
-
+                print(f"Error loading {fname}: {e}")
 
     def _register_from_module(self, module: ModuleType) -> None:
         for _, obj in inspect.getmembers(module, inspect.isclass):
@@ -43,21 +38,23 @@ class Microkernel:
                 instance = obj()
                 self.register(instance)
 
-
-    # --- Registry ---
     def register(self, op: Operation) -> None:
         name = op.name().lower().strip()
-        if not name in self._registry:
+        if name not in self._registry:
             self._registry[name] = op
 
-
-    def available(self) -> List[str]:
+    def available(self):
         return sorted(self._registry.keys())
 
-
-    def execute(self, opname: str, args: Sequence[float]) -> float:
-        opname = opname.lower().strip()
-        if opname not in self._registry:
-            raise KeyError(f"Unknown operation '{opname}'. Available: {', '.join(self.available())}")
-        op = self._registry[opname]
-        return op.execute([float(x) for x in args])
+    # Event handler
+    def on_calculate(self, data):
+        try:
+            opname = data["operator"].lower().strip()
+            args = [float(x) for x in data["args"]]
+            if opname not in self._registry:
+                raise KeyError(f"Unknown operation '{opname}'.")
+            op = self._registry[opname]
+            result = op.execute(args)
+            self.bus.publish("result", {"result": result})
+        except Exception as e:
+            self.bus.publish("error", {"message": str(e)})

@@ -1,13 +1,11 @@
-from core.interfaces import Operation 
+from core.interfaces import Operation
 
 class Add(Operation):
-
-    def name (self) -> str:
+    def name(self):
         return "add"
-    
-    def arity (self) -> int:
-        return 2    
-    
-    def execute (self, args):
-        a,b = args
-        return a + b
+
+    def arity(self):
+        return 2
+
+    def execute(self, args):
+        return sum(args)
