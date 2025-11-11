@@ -47,7 +47,7 @@ class Microkernel:
     # --- Registry ---
     def register(self, op: Operation) -> None:
         name = op.name().lower().strip()
-        if name in self._registry:
+        if not name in self._registry:
             self._registry[name] = op
 
 
